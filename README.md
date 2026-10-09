@@ -10,6 +10,13 @@ In Unity Package Manager (`Window > Package Manager`), click `+`, select **Add p
 https://github.com/Amaan12/AssetStoreFetcher.git
 ```
 
+Or add directly to `Packages/manifest.json`:
+```json
+"dependencies": {
+  "com.amaan.assetstorefetcher": "https://github.com/Amaan12/AssetStoreFetcher.git"
+}
+```
+
 ## Features
 
 - **0ms Asset Lookup**: Fast local asset catalog cache stored in `UserSettings/asset_catalog.json`.
@@ -23,12 +30,17 @@ https://github.com/Amaan12/AssetStoreFetcher.git
 ### For AI Coding Agents & CLI
 Install single or multiple packages with fuzzy name matching in a single pass:
 ```powershell
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/install.ps1" "<PackageName1>" "<PackageName2>"
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/install.ps1').Path '<PackageName1>' '<PackageName2>'"
+```
+
+Or direct `unity cmd eval`:
+```powershell
+unity cmd eval --code "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList('<PackageName1>;<PackageName2>');"
 ```
 
 Refresh/regenerate the asset catalog cache:
 ```powershell
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/refresh.ps1"
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/refresh.ps1').Path"
 ```
 
 ### In Unity Editor

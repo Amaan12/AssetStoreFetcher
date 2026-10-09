@@ -14,18 +14,22 @@
 Whenever the user asks you to install or batch-install any Asset Store package(s), take whatever asset names the user requested and run **THIS SINGLE COMMAND**:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/install.ps1" "<Asset 1>" "<Asset 2>" "<Asset 3>" ...
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/install.ps1').Path '<Asset 1>' '<Asset 2>' ..."
 ```
-*(If installed locally in the `Assets` folder instead of Package Manager, use `"Assets/AssetStoreFetcher/install.ps1"`)*
 
 ### Generic Syntax:
 Pass every requested asset name as a separate argument in quotes. The script automatically handles fuzzy matching against the user's purchased assets catalog:
 ```powershell
 # Single package:
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/install.ps1" "<PackageName>"
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/install.ps1').Path '<PackageName>'"
 
 # Multiple packages (Batched):
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/install.ps1" "<Package 1>" "<Package 2>" "<Package 3>"
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/install.ps1').Path '<Package 1>' '<Package 2>'"
+```
+
+*(Alternative direct CLI invocation without PowerShell script path resolution)*:
+```powershell
+unity cmd eval --code "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList('<Package 1>;<Package 2>');"
 ```
 
 ---
@@ -46,10 +50,14 @@ Do NOT run Unity commands to search for packages. Simply view:
 ---
 
 ## Refreshing the Catalog (Regenerating the List)
-The installer (`install.ps1`) automatically regenerates the catalog before installing. To manually refresh/regenerate the list at any time (replacing the existing `UserSettings/asset_catalog.json`):
+The installer automatically regenerates the catalog before installing. To manually refresh/regenerate the list at any time (replacing the existing `UserSettings/asset_catalog.json`):
 Run:
 ```powershell
-powershell -ExecutionPolicy Bypass -File "Packages/com.amaan.assetstorefetcher/refresh.ps1"
+powershell -ExecutionPolicy Bypass -Command "& (Resolve-Path 'Library/PackageCache/com.amaan.assetstorefetcher*/refresh.ps1').Path"
+```
+Or direct:
+```powershell
+unity cmd eval --code "return AssetStoreFetcher.AssetStoreAutoInstaller.BuildIndex();"
 ```
 Or in the Unity Editor menu:
 > **Tools** > **Amaan12** > **Asset Store Auto Installer** > **Refresh Asset Catalog**
