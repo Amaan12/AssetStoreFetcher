@@ -137,7 +137,7 @@ namespace AssetStoreFetcher
                         var info = kv.Value;
                         if (info == null) continue;
 
-                        var prodId = (long)(info.GetType().GetField("productId", BindingFlags.Public | BindingFlags.NonInternal | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(info) ?? 0L);
+                        var prodId = (long)(info.GetType().GetField("productId", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(info) ?? 0L);
                         var name = info.GetType().GetField("displayName", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(info)?.ToString();
 
                         if (!string.IsNullOrEmpty(name) && prodId > 0)
