@@ -493,24 +493,50 @@ namespace AssetStoreFetcher
             }
         }
 
+        private static int _remainingPackageImports;
+        private static bool _assembliesLockedByInstaller;
+
         private static void ExecuteAtomicBatchInstall(object installer, BatchJobState state)
         {
             state.phase = "installing";
             SaveBatchState(state);
 
-            EditorApplication.LockReloadAssemblies();
+            int count = state.pendingInstalls.Count;
+            if (count == 0)
+            {
+                state.phase = "completed";
+                SaveBatchState(state);
+                return;
+            }
+
+            _remainingPackageImports = count;
+            if (!_assembliesLockedByInstaller)
+            {
+                EditorApplication.LockReloadAssemblies();
+                _assembliesLockedByInstaller = true;
+            }
+
+            AssetDatabase.importPackageCompleted -= OnPackageImportCompleted;
+            AssetDatabase.importPackageFailed -= OnPackageImportFailed;
+            AssetDatabase.importPackageCancelled -= OnPackageImportCancelled;
+
+            AssetDatabase.importPackageCompleted += OnPackageImportCompleted;
+            AssetDatabase.importPackageFailed += OnPackageImportFailed;
+            AssetDatabase.importPackageCancelled += OnPackageImportCancelled;
 
             try
             {
-                foreach (var id in state.pendingInstalls)
+                var ids = state.pendingInstalls.ToList();
+                state.pendingInstalls.Clear();
+                state.phase = "completed";
+                SaveBatchState(state);
+
+                foreach (var id in ids)
                 {
                     DoInstallSingle(id, installer);
                 }
 
-                state.phase = "completed";
-                state.pendingInstalls.Clear();
-                SaveBatchState(state);
-                Debug.Log($"[AssetStoreAutoInstaller] Batch installation complete for {state.allProductIds.Count} packages! Recompiling scripts once.");
+                Debug.Log($"[AssetStoreAutoInstaller] Queued atomic batch installation for {ids.Count} packages (assemblies locked until all unpack).");
             }
             catch (Exception ex)
             {
@@ -518,9 +544,34 @@ namespace AssetStoreFetcher
                 state.errorMessage = ex.Message;
                 SaveBatchState(state);
                 Debug.LogError($"[AssetStoreAutoInstaller] Error during batch install: {ex}");
+                FinishBatchImportUnlock();
             }
-            finally
+        }
+
+        private static void OnPackageImportCompleted(string packageName) => OnSingleImportDone();
+        private static void OnPackageImportFailed(string packageName, string errorMessage) => OnSingleImportDone();
+        private static void OnPackageImportCancelled(string packageName) => OnSingleImportDone();
+
+        private static void OnSingleImportDone()
+        {
+            _remainingPackageImports--;
+            if (_remainingPackageImports <= 0)
             {
+                FinishBatchImportUnlock();
+            }
+        }
+
+        private static void FinishBatchImportUnlock()
+        {
+            AssetDatabase.importPackageCompleted -= OnPackageImportCompleted;
+            AssetDatabase.importPackageFailed -= OnPackageImportFailed;
+            AssetDatabase.importPackageCancelled -= OnPackageImportCancelled;
+            _remainingPackageImports = 0;
+
+            if (_assembliesLockedByInstaller)
+            {
+                _assembliesLockedByInstaller = false;
+                Debug.Log("[AssetStoreAutoInstaller] All packages unpacked! Unlocking assemblies for single compilation pass.");
                 EditorApplication.UnlockReloadAssemblies();
                 AssetDatabase.Refresh();
             }
