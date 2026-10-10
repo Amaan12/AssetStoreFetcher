@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1
 
 ### 2. Direct Unity CLI (`unity cmd run_script`)
 ```powershell
-$f="$env:TEMP\asf.cs"; irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs -OutFile $f; unity cmd run_script --file $f --entry "AssetStoreFetcher.AssetStoreAutoInstaller.InstallList" --args '[\"<Package_1>;<Package_2>\"]'; rm $f
+$f="$env:TEMP\asf.cs"; (irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs).Replace("__PAYLOAD__","<Package_1>;<Package_2>") | Set-Content $f; unity cmd run_script --file $f --entry "AssetStoreFetcher.AssetStoreAutoInstaller.RunEmbedded"; rm $f
 ```
 
 ---

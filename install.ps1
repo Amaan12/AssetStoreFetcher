@@ -37,22 +37,23 @@ $tempScript = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "AssetS
 try {
     $localSource = if ($PSScriptRoot) { Join-Path $PSScriptRoot "AssetStoreAutoInstaller.cs" } else { $null }
     if ($localSource -and (Test-Path $localSource)) {
-        Copy-Item -Path $localSource -Destination $tempScript -Force
+        $scriptContent = [System.IO.File]::ReadAllText($localSource)
     } else {
         Write-Host "Fetching installer into memory from GitHub..." -ForegroundColor Cyan
         $rawUrl = "https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs"
-        Invoke-WebRequest -Uri $rawUrl -OutFile $tempScript -UseBasicParsing
+        $scriptContent = (Invoke-WebRequest -Uri $rawUrl -UseBasicParsing).Content
     }
 
     $csv = ($Packages -join ";")
     Write-Host "Installing packages: $csv" -ForegroundColor Cyan
 
-    # Escape quotes for native CLI JSON array argument
-    $escapedCsv = $csv.Replace('\', '\\').Replace('"', '\"')
-    $argsParam = "[\`"$escapedCsv\`"]"
+    # Embed Base64 payload directly into temp script to avoid CLI argument splitting on spaces
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($csv))
+    $scriptContent = $scriptContent.Replace("__PAYLOAD_B64__", $b64)
+    [System.IO.File]::WriteAllText($tempScript, $scriptContent)
 
     # Compile and execute directly in memory via Roslyn (no domain reload, zero project files)
-    & $unityBin cmd run_script --file $tempScript --entry "AssetStoreFetcher.AssetStoreAutoInstaller.InstallList" --args $argsParam
+    & $unityBin cmd run_script --file $tempScript --entry "AssetStoreFetcher.AssetStoreAutoInstaller.RunEmbedded"
 }
 finally {
     if (Test-Path $tempScript) {

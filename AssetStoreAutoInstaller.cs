@@ -271,6 +271,19 @@ namespace AssetStoreFetcher
 
         #region Installation & True Batching Pipeline
 
+        private const string EmbeddedPayload = "__PAYLOAD__";
+        private const string EmbeddedBase64Payload = "__PAYLOAD_B64__";
+
+        public static string RunEmbedded()
+        {
+            if (!EmbeddedBase64Payload.StartsWith("__PAYLOAD"))
+            {
+                var decoded = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(EmbeddedBase64Payload));
+                return InstallList(decoded);
+            }
+            return InstallList(EmbeddedPayload);
+        }
+
         public static string Install(string query)
         {
             return InstallBatch(query);
