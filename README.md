@@ -1,41 +1,25 @@
 # Asset Store Fetcher
 
-Headless Unity Asset Store package installer and atomic batch downloader for instant CLI and AI automation.
+Zero-footprint Unity Asset Store batch downloader & installer. Runs 100% in memory via `unity cmd run_script`.
 
-> **100% Cloud / In-Memory**: Compiles and executes directly in memory via `unity cmd run_script` from `$env:TEMP`. Never touches `Assets/` or `Packages/`.
+## Usage (Run in Project Root)
 
----
-
-## Usage
-
-Run inside your Unity project root:
-
-### 1. PowerShell / Terminal (Cloud One-Liner)
+### PowerShell
 ```powershell
 # Batch install:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1))) "<Package_1>" "<Package_2>"
 
-# Interactive mode (prompts for names):
+# Interactive:
 irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1 | iex
 ```
 
-### 2. Direct Unity CLI (`unity cmd run_script`)
+### Unity CLI
 ```powershell
 $f="$env:TEMP\asf.cs"; (irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs).Replace("__PAYLOAD__","<Package_1>;<Package_2>") | Set-Content $f; unity cmd run_script --file $f --entry "AssetStoreFetcher.AssetStoreAutoInstaller.RunEmbedded"; rm $f
 ```
 
----
-
-## Features
-
-* **In-Memory Execution**: Uses Roslyn (`run_script`) with zero project files and no domain reload overhead.
-* **Auto Catalog Refresh**: Syncs purchased catalog (`UserSettings/asset_catalog.json`) before every install.
-* **Parallel Downloads**: Missing packages download concurrently in the background.
-* **Atomic Batch Install**: Freezes compilation (`LockReloadAssemblies`) and unpacks all packages in a **single compilation pass**.
-* **Fuzzy Matching**: Resolves queries via exact, prefix, or substring search.
-
----
-
-## License
-
-[MIT](LICENSE.md)
+## How It Works
+* **Zero Footprint**: Compiles in memory from `$env:TEMP`; never touches `Assets/` or `Packages/`.
+* **Auto-Index**: Syncs purchased catalog (`UserSettings/asset_catalog.json`) automatically.
+* **Parallel Download → Batch Import**: Downloads all missing packages concurrently, waits for 100% completion, then imports with locked assemblies (`LockReloadAssemblies`).
+* **Fuzzy Search**: Matches exact, prefix, or substring package names.
