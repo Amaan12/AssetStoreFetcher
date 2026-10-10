@@ -1,9 +1,2 @@
-$unityBin = "unity"
-if (-not (Get-Command "unity" -ErrorAction SilentlyContinue)) {
-    if (Test-Path "$env:LOCALAPPDATA\Unity\bin\unity.exe") {
-        $unityBin = "$env:LOCALAPPDATA\Unity\bin\unity.exe"
-    }
-}
-
-$code = "return AssetStoreFetcher.AssetStoreAutoInstaller.BuildIndex();"
-& $unityBin cmd eval --code $code
+# Quick catalog refresh one-liner
+& ([scriptblock]::Create((Invoke-RestMethod https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1))) -RefreshOnly
