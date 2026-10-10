@@ -1,7 +1,6 @@
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
-    [string[]]$Packages,
-    [switch]$KeepScript
+    [string[]]$Packages
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +13,7 @@ if (-not (Test-Path "ProjectSettings/ProjectVersion.txt")) {
 
 # 2. Prompt for package names if none provided (e.g. when run via irm ... | iex)
 if (-not $Packages -or $Packages.Count -eq 0) {
-    $inputPackages = Read-Host "Enter package names to install (comma or space separated)"
+    $inputPackages = Read-Host "Enter package names to install (comma or semicolon separated)"
     if ($inputPackages) {
         $Packages = $inputPackages -split "[,;]" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
     }
@@ -32,42 +31,31 @@ if (-not (Get-Command "unity" -ErrorAction SilentlyContinue)) {
     }
 }
 
-# 4. Ensure AssetStoreAutoInstaller.cs is available in Assets/Editor
-$existingScript = Get-ChildItem -Path "Assets" -Filter "AssetStoreAutoInstaller.cs" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-$tempInstalled = $false
-$targetScriptPath = "Assets/Editor/AssetStoreAutoInstaller.cs"
-
-if (-not $existingScript) {
-    if (-not (Test-Path "Assets/Editor")) {
-        New-Item -ItemType Directory -Path "Assets/Editor" -Force | Out-Null
-    }
-
-    $localSource = if ($PSScriptRoot) { Join-Path $PSScriptRoot "AssetStoreAutoInstaller.cs" } else { $null }
-    if ($localSource -and (Test-Path $localSource)) {
-        Copy-Item -Path $localSource -Destination $targetScriptPath -Force
-    } else {
-        Write-Host "Fetching AssetStoreAutoInstaller.cs from GitHub..." -ForegroundColor Cyan
-        $rawUrl = "https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs"
-        Invoke-WebRequest -Uri $rawUrl -OutFile $targetScriptPath -UseBasicParsing
-    }
-    $tempInstalled = $true
-}
+# 4. Fetch script into OS Temp directory (never touches Unity's Assets/ folder)
+$tempScript = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "AssetStoreAutoInstaller_" + [guid]::NewGuid().ToString("N") + ".cs")
 
 try {
+    $localSource = if ($PSScriptRoot) { Join-Path $PSScriptRoot "AssetStoreAutoInstaller.cs" } else { $null }
+    if ($localSource -and (Test-Path $localSource)) {
+        Copy-Item -Path $localSource -Destination $tempScript -Force
+    } else {
+        Write-Host "Fetching installer into memory from GitHub..." -ForegroundColor Cyan
+        $rawUrl = "https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs"
+        Invoke-WebRequest -Uri $rawUrl -OutFile $tempScript -UseBasicParsing
+    }
+
     $csv = ($Packages -join ";")
     Write-Host "Installing packages: $csv" -ForegroundColor Cyan
-    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($csv))
-    $code = "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList(System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(\`"$b64\`")));"
-    & $unityBin cmd eval --code $code
+
+    # Escape quotes for native CLI JSON array argument
+    $escapedCsv = $csv.Replace('\', '\\').Replace('"', '\"')
+    $argsParam = "[\`"$escapedCsv\`"]"
+
+    # Compile and execute directly in memory via Roslyn (no domain reload, zero project files)
+    & $unityBin cmd run_script --file $tempScript --entry "AssetStoreFetcher.AssetStoreAutoInstaller.InstallList" --args $argsParam
 }
 finally {
-    # Clean up temporary installer script unless -KeepScript was specified
-    if ($tempInstalled -and -not $KeepScript) {
-        if (Test-Path $targetScriptPath) {
-            Remove-Item -Path $targetScriptPath -Force -ErrorAction SilentlyContinue
-        }
-        if (Test-Path "$targetScriptPath.meta") {
-            Remove-Item -Path "$targetScriptPath.meta" -Force -ErrorAction SilentlyContinue
-        }
+    if (Test-Path $tempScript) {
+        Remove-Item -Path $tempScript -Force -ErrorAction SilentlyContinue
     }
 }

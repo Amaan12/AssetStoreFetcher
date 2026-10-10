@@ -2,7 +2,7 @@
 
 Headless Unity Asset Store package installer and atomic batch downloader for instant CLI and AI automation.
 
-> **Zero Project Footprint**: Runs on demand, refreshes catalog automatically, downloads in parallel, installs with locked compilation, and leaves zero residual files.
+> **100% Cloud / In-Memory**: Compiles and executes directly in memory via `unity cmd run_script` from `$env:TEMP`. Never touches `Assets/` or `Packages/`.
 
 ---
 
@@ -19,15 +19,16 @@ Run inside your Unity project root:
 irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1 | iex
 ```
 
-### 2. Unity CLI (`unity cmd eval`)
+### 2. Direct Unity CLI (`unity cmd run_script`)
 ```powershell
-unity cmd eval --code "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList('<Package_1>;<Package_2>');"
+$f="$env:TEMP\asf.cs"; irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/AssetStoreAutoInstaller.cs -OutFile $f; unity cmd run_script --file $f --entry "AssetStoreFetcher.AssetStoreAutoInstaller.InstallList" --args '[\"<Package_1>;<Package_2>\"]'; rm $f
 ```
 
 ---
 
 ## Features
 
+* **In-Memory Execution**: Uses Roslyn (`run_script`) with zero project files and no domain reload overhead.
 * **Auto Catalog Refresh**: Syncs purchased catalog (`UserSettings/asset_catalog.json`) before every install.
 * **Parallel Downloads**: Missing packages download concurrently in the background.
 * **Atomic Batch Install**: Freezes compilation (`LockReloadAssemblies`) and unpacks all packages in a **single compilation pass**.

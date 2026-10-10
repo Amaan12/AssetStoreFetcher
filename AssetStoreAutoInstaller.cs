@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+#pragma warning disable CS0436
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -349,6 +350,8 @@ namespace AssetStoreFetcher
             // Phase 1: If any require downloading, queue all downloads simultaneously
             if (needDownload.Count > 0)
             {
+                EditorApplication.update -= OnEditorUpdate;
+                EditorApplication.update += OnEditorUpdate;
                 foreach (var a in needDownload)
                 {
                     TriggerPackageDownload(a.productId, opDisp, dlMgr);
