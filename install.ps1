@@ -1,8 +1,7 @@
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Packages,
-    [switch]$KeepScript,
-    [switch]$RefreshOnly
+    [switch]$KeepScript
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +13,7 @@ if (-not (Test-Path "ProjectSettings/ProjectVersion.txt")) {
 }
 
 # 2. Prompt for package names if none provided (e.g. when run via irm ... | iex)
-if (-not $RefreshOnly -and (-not $Packages -or $Packages.Count -eq 0)) {
+if (-not $Packages -or $Packages.Count -eq 0) {
     $inputPackages = Read-Host "Enter package names to install (comma or space separated)"
     if ($inputPackages) {
         $Packages = $inputPackages -split "[,;]" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
@@ -55,17 +54,11 @@ if (-not $existingScript) {
 }
 
 try {
-    if ($RefreshOnly) {
-        Write-Host "Refreshing Asset Catalog..." -ForegroundColor Cyan
-        $code = "return AssetStoreFetcher.AssetStoreAutoInstaller.BuildIndex();"
-        & $unityBin cmd eval --code $code
-    } else {
-        $csv = ($Packages -join ";")
-        Write-Host "Installing packages: $csv" -ForegroundColor Cyan
-        $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($csv))
-        $code = "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList(System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(\`"$b64\`")));"
-        & $unityBin cmd eval --code $code
-    }
+    $csv = ($Packages -join ";")
+    Write-Host "Installing packages: $csv" -ForegroundColor Cyan
+    $b64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($csv))
+    $code = "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList(System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(\`"$b64\`")));"
+    & $unityBin cmd eval --code $code
 }
 finally {
     # Clean up temporary installer script unless -KeepScript was specified

@@ -2,40 +2,44 @@
 
 Headless Unity Asset Store package installer and atomic batch downloader designed for instant CLI automation and AI coding agents.
 
-> **Zero Project Footprint**: No package needed in `Packages/manifest.json`. Runs on demand, installs packages with locked compilation, and leaves no residual files.
+> **Zero Project Footprint**: Runs on demand, automatically refreshes your catalog, downloads packages in parallel, installs with locked compilation, and leaves zero residual files in your project.
 
 ---
 
-## Quick Install (PowerShell)
+## Usage
 
-Inside your Unity project root, run:
+Run either via standard terminal or directly through Unity's CLI from the root of your Unity project:
 
+### 1. PowerShell / Terminal (Cloud One-Liner)
+
+No cloning or repository setup needed.
+
+**Batch install packages:**
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1))) "Odin Inspector" "PrimeTween"
 ```
 
-Or run interactively (prompts for package names):
+**Interactive mode (prompts for package names):**
 ```powershell
 irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/install.ps1 | iex
+```
+
+### 2. Unity CLI (`unity cmd eval`)
+
+If you have the Unity CLI available in your environment:
+
+```powershell
+unity cmd eval --code "return AssetStoreFetcher.AssetStoreAutoInstaller.InstallList('Odin Inspector;PrimeTween');"
 ```
 
 ---
 
 ## Features
 
+* **Auto Catalog Refresh**: Automatically rebuilds and synchronizes your purchased asset catalog (`UserSettings/asset_catalog.json`) on every install.
 * **Parallel Downloads**: Missing packages download concurrently in the background.
 * **Atomic Batch Install**: Freezes assembly compilation (`LockReloadAssemblies`) and unpacks all packages in a **single compilation pass**.
-* **Fuzzy Matching**: Matches package queries against your purchased assets catalog in `UserSettings/asset_catalog.json`.
-* **Zero Project Overhead**: Leaves no Git package dependencies or temporary scripts in your repository.
-
----
-
-## Refresh Asset Catalog
-
-To refresh/rebuild your local catalog cache (`UserSettings/asset_catalog.json`):
-```powershell
-irm https://raw.githubusercontent.com/Amaan12/AssetStoreFetcher/main/refresh.ps1 | iex
-```
+* **Fuzzy Matching**: Matches queries against your catalog using exact, prefix, or substring search.
 
 ---
 
