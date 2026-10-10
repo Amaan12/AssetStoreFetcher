@@ -314,7 +314,7 @@ namespace AssetStoreFetcher
             if (catalog == null || catalog.assets.Count == 0)
                 return "{\"status\":\"error\",\"message\":\"Catalog is empty. Call BuildIndex() first.\"}";
 
-            if (!GetContext(out var opDisp, out var installer, out var dlMgr, out _, out _))
+            if (!GetContext(out var opDisp, out var installer, out var dlMgr, out var pkgDb, out _))
                 return "{\"status\":\"error\",\"message\":\"Failed to get Package Manager context.\"}";
 
             var toInstall = new List<AssetEntry>();
@@ -367,7 +367,7 @@ namespace AssetStoreFetcher
                 EditorApplication.update += OnEditorUpdate;
                 foreach (var a in needDownload)
                 {
-                    TriggerPackageDownload(a.productId, opDisp, dlMgr);
+                    TriggerPackageDownload(a.productId, opDisp, dlMgr, pkgDb);
                 }
 
                 return $"{{\"status\":\"downloading\",\"batchId\":\"{state.batchId}\",\"total\":{toInstall.Count},\"downloading\":{needDownload.Count},\"message\":\"Phase 1 started: Downloading {needDownload.Count} assets. Compilation locked until all complete.\"}}";
@@ -387,23 +387,40 @@ namespace AssetStoreFetcher
             return JsonUtility.ToJson(state);
         }
 
-        private static void TriggerPackageDownload(long productId, object opDisp, object dlMgr)
+        private static void TriggerPackageDownload(long productId, object opDisp, object dlMgr, object pkgDb = null)
         {
             try
             {
-                // Try via opDisp first (proper license token handshake)
-                var dlMethod = opDisp.GetType().GetMethod("Download", new[] { typeof(IEnumerable<long>) });
-                if (dlMethod != null)
+                // 1. Resolve IPackage from PackageDatabase and call opDisp.Download(IPackage) (proper license token & multi-download handshake)
+                if (pkgDb != null && opDisp != null)
                 {
-                    dlMethod.Invoke(opDisp, new object[] { new[] { productId } });
-                    return;
+                    var getPkg = pkgDb.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        .FirstOrDefault(m => m.Name == "GetPackage" && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == typeof(string));
+                    var pkg = getPkg?.Invoke(pkgDb, new object[] { productId.ToString() });
+                    if (pkg != null)
+                    {
+                        var iPkgType = typeof(Editor).Assembly.GetType("UnityEditor.PackageManager.UI.Internal.IPackage");
+                        var dlPkgMethod = iPkgType != null ? opDisp.GetType().GetMethod("Download", new[] { iPkgType }) : null;
+                        if (dlPkgMethod != null)
+                        {
+                            dlPkgMethod.Invoke(opDisp, new object[] { pkg });
+                            return;
+                        }
+                    }
                 }
             }
             catch { }
 
             try
             {
-                var dlMethod = dlMgr.GetType().GetMethod("Download", new[] { typeof(IEnumerable<long>) });
+                var dlSingle = dlMgr?.GetType().GetMethod("Download", new[] { typeof(long) });
+                if (dlSingle != null)
+                {
+                    dlSingle.Invoke(dlMgr, new object[] { productId });
+                    return;
+                }
+
+                var dlMethod = dlMgr?.GetType().GetMethod("Download", new[] { typeof(IEnumerable<long>) });
                 dlMethod?.Invoke(dlMgr, new object[] { new[] { productId } });
             }
             catch { }
@@ -415,7 +432,7 @@ namespace AssetStoreFetcher
             if (state == null || state.phase != "downloading" || state.pendingDownloads.Count == 0)
                 return;
 
-            if (!GetContext(out _, out var installer, out var dlMgr, out _, out _))
+            if (!GetContext(out var opDisp, out var installer, out var dlMgr, out var pkgDb, out _))
                 return;
 
             var finished = new List<long>();
@@ -440,12 +457,18 @@ namespace AssetStoreFetcher
                         state.phase = "error";
                         state.errorMessage = $"Download failed for ID {id}: {err}";
                         SaveBatchState(state);
+                        EditorApplication.update -= OnEditorUpdate;
                         return;
                     }
                     if (!inProg)
                     {
                         finished.Add(id);
                     }
+                }
+                else
+                {
+                    // Operation was not started yet or dropped; re-trigger via opDisp.Download(IPackage)
+                    TriggerPackageDownload(id, opDisp, dlMgr, pkgDb);
                 }
             }
 
@@ -459,6 +482,7 @@ namespace AssetStoreFetcher
             // Phase 2 Trigger: ONLY when 100% of downloads are finished!
             if (state.pendingDownloads.Count == 0)
             {
+                EditorApplication.update -= OnEditorUpdate;
                 Debug.Log($"[AssetStoreAutoInstaller] All downloads complete! Starting atomic batch installation of {state.pendingInstalls.Count} packages.");
                 ExecuteAtomicBatchInstall(installer, state);
             }
