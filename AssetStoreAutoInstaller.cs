@@ -184,7 +184,7 @@ namespace AssetStoreFetcher
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
-                var json = JsonUtility.ToJson(catalog, true);
+                var json = SerializeCatalog(catalog);
                 File.WriteAllText(CatalogPath, json);
                 if (CatalogPath.StartsWith("Assets"))
                     AssetDatabase.Refresh();
@@ -195,6 +195,28 @@ namespace AssetStoreFetcher
             {
                 return $"Exception while indexing: {ex.Message}";
             }
+        }
+
+        private static string EscapeJson(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
+        }
+
+        private static string SerializeCatalog(AssetCatalog catalog)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("{");
+            sb.AppendLine("  \"assets\": [");
+            for (int i = 0; i < catalog.assets.Count; i++)
+            {
+                var a = catalog.assets[i];
+                var comma = (i < catalog.assets.Count - 1) ? "," : "";
+                sb.AppendLine($"    {{ \"name\": \"{EscapeJson(a.name)}\", \"productId\": {a.productId}, \"packageUniqueId\": \"{EscapeJson(a.packageUniqueId)}\" }}{comma}");
+            }
+            sb.AppendLine("  ]");
+            sb.Append("}");
+            return sb.ToString();
         }
 
         private static void FetchAllPurchases(object myAssetsPage)
@@ -219,18 +241,6 @@ namespace AssetStoreFetcher
         {
             if (_cachedCatalog != null && _cachedCatalog.assets.Count > 0)
                 return _cachedCatalog;
-
-            if (File.Exists(CatalogPath))
-            {
-                try
-                {
-                    var json = File.ReadAllText(CatalogPath);
-                    _cachedCatalog = JsonUtility.FromJson<AssetCatalog>(json);
-                    if (_cachedCatalog != null && _cachedCatalog.assets.Count > 0)
-                        return _cachedCatalog;
-                }
-                catch { }
-            }
 
             BuildIndex();
             return _cachedCatalog;
@@ -384,7 +394,7 @@ namespace AssetStoreFetcher
             if (state == null || string.IsNullOrEmpty(state.batchId) || state.phase == "idle")
                 return "{\"status\":\"idle\",\"message\":\"No active batch job.\"}";
 
-            return JsonUtility.ToJson(state);
+            return SerializeBatchStateJson(state);
         }
 
         private static void TriggerPackageDownload(long productId, object opDisp, object dlMgr, object pkgDb = null)
@@ -643,21 +653,66 @@ namespace AssetStoreFetcher
 
         private static void SaveBatchState(BatchJobState state)
         {
-            SessionState.SetString(SessionKeyBatchState, JsonUtility.ToJson(state));
+            if (state == null)
+            {
+                SessionState.SetString(SessionKeyBatchState, "");
+                return;
+            }
+
+            var lines = new[]
+            {
+                state.batchId ?? "",
+                state.phase ?? "idle",
+                (state.errorMessage ?? "").Replace("\r", " ").Replace("\n", " "),
+                string.Join(",", state.allProductIds),
+                string.Join("\t", state.allNames),
+                string.Join(",", state.pendingDownloads),
+                string.Join(",", state.pendingInstalls)
+            };
+            SessionState.SetString(SessionKeyBatchState, string.Join("\n", lines));
         }
 
         private static BatchJobState LoadBatchState()
         {
-            var json = SessionState.GetString(SessionKeyBatchState, "");
-            if (string.IsNullOrEmpty(json)) return null;
+            var raw = SessionState.GetString(SessionKeyBatchState, "");
+            if (string.IsNullOrEmpty(raw)) return null;
             try
             {
-                return JsonUtility.FromJson<BatchJobState>(json);
+                var parts = raw.Split('\n');
+                if (parts.Length < 7) return null;
+                return new BatchJobState
+                {
+                    batchId = parts[0],
+                    phase = parts[1],
+                    errorMessage = parts[2],
+                    allProductIds = ParseLongList(parts[3]),
+                    allNames = string.IsNullOrEmpty(parts[4]) ? new List<string>() : parts[4].Split('\t').ToList(),
+                    pendingDownloads = ParseLongList(parts[5]),
+                    pendingInstalls = ParseLongList(parts[6])
+                };
             }
             catch
             {
                 return null;
             }
+        }
+
+        private static List<long> ParseLongList(string csv)
+        {
+            var list = new List<long>();
+            if (string.IsNullOrWhiteSpace(csv)) return list;
+            foreach (var s in csv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (long.TryParse(s.Trim(), out var v))
+                    list.Add(v);
+            }
+            return list;
+        }
+
+        private static string SerializeBatchStateJson(BatchJobState s)
+        {
+            var namesJson = string.Join(",", s.allNames.Select(n => $"\"{EscapeJson(n)}\""));
+            return $"{{\"batchId\":\"{EscapeJson(s.batchId)}\",\"phase\":\"{EscapeJson(s.phase)}\",\"errorMessage\":\"{EscapeJson(s.errorMessage)}\",\"allProductIds\":[{string.Join(",", s.allProductIds)}],\"allNames\":[{namesJson}],\"pendingDownloads\":[{string.Join(",", s.pendingDownloads)}],\"pendingInstalls\":[{string.Join(",", s.pendingInstalls)}]}}";
         }
 
         private static bool GetContext(out object opDisp, out object installer, out object dlMgr, out object pkgDb, out object myAssetsPage)
