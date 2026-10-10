@@ -426,6 +426,8 @@ namespace AssetStoreFetcher
             catch { }
         }
 
+        private static double _lastDownloadRetryTime;
+
         private static void OnEditorUpdate()
         {
             var state = LoadBatchState();
@@ -436,9 +438,13 @@ namespace AssetStoreFetcher
                 return;
 
             var finished = new List<long>();
+            var now = EditorApplication.timeSinceStartup;
+            bool canRetry = (now - _lastDownloadRetryTime) > 3.0;
+            bool didRetry = false;
+
             foreach (var id in state.pendingDownloads)
             {
-                // Check if operation finished or file is now in local cache
+                // Only mark finished when file is confirmed in local cache and no download is active
                 if (!IsDownloadNeeded(id, dlMgr))
                 {
                     finished.Add(id);
@@ -449,7 +455,6 @@ namespace AssetStoreFetcher
                 var op = getOp?.Invoke(dlMgr, new object[] { (long?)id });
                 if (op != null)
                 {
-                    var inProg = (bool)(op.GetType().GetProperty("isInProgress")?.GetValue(op) ?? false);
                     var err = op.GetType().GetProperty("errorMessage")?.GetValue(op)?.ToString();
                     if (!string.IsNullOrEmpty(err))
                     {
@@ -460,17 +465,17 @@ namespace AssetStoreFetcher
                         EditorApplication.update -= OnEditorUpdate;
                         return;
                     }
-                    if (!inProg)
-                    {
-                        finished.Add(id);
-                    }
                 }
-                else
+                else if (canRetry)
                 {
-                    // Operation was not started yet or dropped; re-trigger via opDisp.Download(IPackage)
+                    // Operation was not started yet or dropped; re-trigger throttled
                     TriggerPackageDownload(id, opDisp, dlMgr, pkgDb);
+                    didRetry = true;
                 }
             }
+
+            if (didRetry)
+                _lastDownloadRetryTime = now;
 
             foreach (var id in finished)
             {
@@ -494,7 +499,6 @@ namespace AssetStoreFetcher
             SaveBatchState(state);
 
             EditorApplication.LockReloadAssemblies();
-            AssetDatabase.StartAssetEditing();
 
             try
             {
@@ -517,7 +521,6 @@ namespace AssetStoreFetcher
             }
             finally
             {
-                AssetDatabase.StopAssetEditing();
                 EditorApplication.UnlockReloadAssemblies();
                 AssetDatabase.Refresh();
             }
